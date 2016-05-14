@@ -1,3 +1,3 @@
-Hubo un error mientras el usuario se conectaba: Puede que el servidor este apagado. Intenta mas tarde
-Error: no se pudo enviar el mensaje con Id:Ä“O· tipo:$8· valor:2
-Error: no se pudo recibir el mensaje con ID:Á|·ğú}·P{³¶
+Se recibio satisfactoriamente el mensaje con ID:0 tipo:connection_ok valor:Client connected
+El usuario se conecto satisfactoriamente.
+El usuario cerro la aplicacion

@@ -302,10 +302,7 @@ void draw(){
 	window->paint();
 }
 
-
-
-
-void receiveFromSever(int socket){
+void* receiveFromSever(int socket){
 	mensaje msj;
 	while(userIsConnected){
 		readObjectMessage(socket, sizeof(msj), &msj);
@@ -321,6 +318,21 @@ void receiveFromSever(int socket){
 	}
 }
 
+void syncronizingWithSever(int socket){
+	mensaje msj;
+	while(userIsConnected){
+		readObjectMessage(socket, sizeof(msj), &msj);
+		if(strcmp(msj.action, "create") == 0){
+			createObject(msj);
+		}else if(strcmp(msj.action, "draw") == 0){
+			return;
+		}else if(strcmp(msj.action, "delete") == 0){
+			return;
+		}else if(strcmp(msj.action, "path") == 0){
+			return;
+		}
+	}
+}
 
 int main(int argc, char* argv[]) {
 	const char *fileName;
@@ -374,19 +386,36 @@ int main(int argc, char* argv[]) {
 		initializeSDL(destinationSocket, windowMsj, escenarioMsj);
 		createObject(escenarioMsj);
 		logWriter->writeUserHasConnectedSuccessfully();
+//		mensaje message;
+//		message.id = 1;
+//		strcpy(message.action, "create");
+//		message.activeState = true;
+//		message.actualPhotogram = 1;
+//		message.height = 81;
+//		message.width = 81;
+//		strcpy(message.imagePath, "avionPrueba2.png");
+//		message.posX = 200;
+//		message.posY = 200;
+//		message.photograms = 1;
+//
+//		createObject(message);
+		syncronizingWithSever(destinationSocket);
+		draw();
+
 		client->threadSDL = std::thread(handleEvents, destinationSocket);
 		client->threadListen = std::thread(receiveFromSever, destinationSocket);
 		client->threadKeepAlive = std::thread(keepAlive, destinationSocket);
 	}
+
 	while(userIsConnected){
 		draw();
 	}
+
 	client->threadSDL.detach();
 	client->threadListen.detach();
 
 	logWriter->writeUserDidTerminateApp();
 	prepareForExit(xmlLoader, parser, logWriter);
-
 
 	return EXIT_SUCCESS;
 }
