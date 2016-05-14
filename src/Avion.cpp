@@ -24,7 +24,6 @@ bool Avion::loadImage(string pathImage, SDL_Renderer* renderer, int width, int h
 	}
 	this->height = height;
 	this->width = width;
-	cout << pathImage << endl;
 	//Pongo como color key el cyan (0,255,255) para que se pinte solo el avion.
 	SDL_SetColorKey( surfaceAux, SDL_TRUE, SDL_MapRGB( surfaceAux->format, 0, 255, 255 ) );
 	this->texture = SDL_CreateTextureFromSurface(renderer, surfaceAux);
@@ -69,6 +68,9 @@ int Avion::processEvent(SDL_Event* event){
 				break;
 			case SDLK_a:
 				value = 7;
+				break;
+			case SDL_QUIT:
+				value = 8;
 				break;
 			}
 		return value;

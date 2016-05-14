@@ -47,7 +47,6 @@ bool painting;
 string nombre;
 Client* client;
 Window* window;
-Background* background;
 Avion* avion;
 
 enum MenuOptionChoosedType {
@@ -181,7 +180,7 @@ int readObjectMessage(int socket, int bytesARecibir, mensaje* msj){
 }
 
 void initializeSDL(int socketConnection, mensaje windowMsj, mensaje escenarioMsj){
-	window = new Window("1942", windowMsj.height, windowMsj.width);;
+	window = new Window("1942", windowMsj.height, windowMsj.width);
 	SDL_RenderClear(window->getRenderer());
 	window->paint();
 }
@@ -199,14 +198,13 @@ void updateObject(mensaje msj){
 
 void deleteObject(mensaje msj){
 	list<Object*>::iterator iterador;
-	mutexObjects.lock();
 	for (iterador = objects.begin(); iterador != objects.end(); iterador++){
 		if((*iterador)->getId() == msj.id ){
+			(*iterador)->destroyTexture();
 			objects.erase(iterador);
 			iterador--;
 		}
 	}
-	mutexObjects.unlock();
 }
 
 void changePath(mensaje msj){
@@ -267,11 +265,23 @@ void handleEvents(int socket){
 			case 7:
 				strcpy(msg.value, "ANIMATE");
 				break;
+			case 8:
+				userIsConnected = false;
+				//falta destruir las texturas de cada uno de los objetos con sdl_destroytexture();
+				objects.clear();
+				SDL_RenderClear(window->getRenderer());
+				SDL_DestroyRenderer(window->getRenderer());
+				window->renderer = NULL;
+				SDL_DestroyWindow(window->window);
+				window->window = NULL;
+				close(client->getSocketConnection());
+				SDL_Quit();
+				break;
 			case -1:
 				userIsConnected = false;
 				close(client->getSocketConnection());
 		}
-		if(button != 0){
+		if(button != 0 && button != 8){
 			usleep(10000);
 			sendMsj(socket, sizeof(msg), &msg);
 		}
@@ -302,10 +312,14 @@ void draw(){
 	window->paint();
 }
 
-void* receiveFromSever(int socket){
+
+
+
+void receiveFromSever(int socket){
 	mensaje msj;
 	while(userIsConnected){
 		readObjectMessage(socket, sizeof(msj), &msj);
+		mutexObjects.lock();
 		if(strcmp(msj.action, "create") == 0){
 			createObject(msj);
 		}else if(strcmp(msj.action, "draw") == 0){
@@ -315,24 +329,10 @@ void* receiveFromSever(int socket){
 		}else if(strcmp(msj.action, "path") == 0){
 			changePath(msj);
 		}
+		mutexObjects.unlock();
 	}
 }
 
-void syncronizingWithSever(int socket){
-	mensaje msj;
-	while(userIsConnected){
-		readObjectMessage(socket, sizeof(msj), &msj);
-		if(strcmp(msj.action, "create") == 0){
-			createObject(msj);
-		}else if(strcmp(msj.action, "draw") == 0){
-			return;
-		}else if(strcmp(msj.action, "delete") == 0){
-			return;
-		}else if(strcmp(msj.action, "path") == 0){
-			return;
-		}
-	}
-}
 
 int main(int argc, char* argv[]) {
 	const char *fileName;
@@ -386,34 +386,16 @@ int main(int argc, char* argv[]) {
 		initializeSDL(destinationSocket, windowMsj, escenarioMsj);
 		createObject(escenarioMsj);
 		logWriter->writeUserHasConnectedSuccessfully();
-//		mensaje message;
-//		message.id = 1;
-//		strcpy(message.action, "create");
-//		message.activeState = true;
-//		message.actualPhotogram = 1;
-//		message.height = 81;
-//		message.width = 81;
-//		strcpy(message.imagePath, "avionPrueba2.png");
-//		message.posX = 200;
-//		message.posY = 200;
-//		message.photograms = 1;
-//
-//		createObject(message);
-		syncronizingWithSever(destinationSocket);
-		draw();
-
 		client->threadSDL = std::thread(handleEvents, destinationSocket);
 		client->threadListen = std::thread(receiveFromSever, destinationSocket);
 		client->threadKeepAlive = std::thread(keepAlive, destinationSocket);
 	}
-
 	while(userIsConnected){
 		draw();
 	}
-
-	client->threadSDL.detach();
-	client->threadListen.detach();
-
+	client->threadSDL.join();
+	client->threadListen.join();
+	client->threadKeepAlive.join();
 	logWriter->writeUserDidTerminateApp();
 	prepareForExit(xmlLoader, parser, logWriter);
 
