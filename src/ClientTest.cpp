@@ -302,6 +302,9 @@ void draw(){
 	window->paint();
 }
 
+
+
+
 void receiveFromSever(int socket){
 	mensaje msj;
 	while(userIsConnected){
@@ -315,9 +318,9 @@ void receiveFromSever(int socket){
 		}else if(strcmp(msj.action, "path") == 0){
 			changePath(msj);
 		}
-		draw();
 	}
 }
+
 
 int main(int argc, char* argv[]) {
 	const char *fileName;
@@ -370,14 +373,13 @@ int main(int argc, char* argv[]) {
 		readObjectMessage(destinationSocket, sizeof(escenarioMsj), &escenarioMsj);
 		initializeSDL(destinationSocket, windowMsj, escenarioMsj);
 		createObject(escenarioMsj);
-		draw();
 		logWriter->writeUserHasConnectedSuccessfully();
 		client->threadSDL = std::thread(handleEvents, destinationSocket);
 		client->threadListen = std::thread(receiveFromSever, destinationSocket);
 		client->threadKeepAlive = std::thread(keepAlive, destinationSocket);
 	}
 	while(userIsConnected){
-		//draw();
+		draw();
 	}
 	client->threadSDL.detach();
 	client->threadListen.detach();
