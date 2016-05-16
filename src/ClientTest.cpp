@@ -108,12 +108,7 @@ int initializeClient(string destinationIp, int port) {
 		logWriter->writeConnectionErrorDescription("Puede que el servidor este apagado. Intenta mas tarde");
 		return 0;
 	}
-	//struct timeval timeOut;
-	//timeOut.tv_sec = 100;
-	//timeOut.tv_usec = 0;
-	//if(setsockopt(socketHandle, SOL_SOCKET, SO_RCVTIMEO, &timeOut, sizeof(struct timeval))!=0)
-		//cout<<"Error al settear el timeout"<<endl;
-		//cout<<strerror(errno)<<endl;
+
 	return socketHandle;
 }
 
@@ -242,27 +237,33 @@ void handleEvents(int socket){
 			button = avion->processEvent(&event);
 		}
 		strcpy(msg.id, nombre.c_str());
-		strcpy(msg.type, "movement");
 		switch(button){
 			case 1:
+				strcpy(msg.type, "movement");
 				strcpy(msg.value, "ABJ");
 				break;
 			case 2:
+				strcpy(msg.type, "movement");
 				strcpy(msg.value, "ARR");
 				break;
 			case 3:
+				strcpy(msg.type, "movement");
 				strcpy(msg.value, "DER");
 				break;
 			case 4:
+				strcpy(msg.type, "movement");
 				strcpy(msg.value, "IZQ");
 				break;
 			case 5:
+				strcpy(msg.type, "shoot");
 				strcpy(msg.value, "DIS");
 				break;
 			case 6:
+				strcpy(msg.type, "reset");
 				strcpy(msg.value, "RES");
 				break;
 			case 7:
+				strcpy(msg.type, "animation");
 				strcpy(msg.value, "ANIMATE");
 				break;
 			case 8:
@@ -291,7 +292,7 @@ void handleEvents(int socket){
 
 void keepAlive(int socketConnection){
 	clientMsj msg;
-	strcpy(msg.value, "alive");
+	strcpy(msg.type, "alive");
 	while(userIsConnected){
 		usleep(1000);
 		sendMsj(socketConnection, sizeof(msg), &msg);
@@ -398,29 +399,21 @@ int main(int argc, char* argv[]) {
 		initializeSDL(destinationSocket, windowMsj, escenarioMsj);
 		createObject(escenarioMsj);
 		logWriter->writeUserHasConnectedSuccessfully();
-//		mensaje message;
-//		message.id = 1;
-//		strcpy(message.action, "create");
-//		message.activeState = true;
-//		message.actualPhotogram = 1;
-//		message.height = 81;
-//		message.width = 81;
-//		strcpy(message.imagePath, "avionPrueba2.png");
-//		message.posX = 200;
-//		message.posY = 200;
-//		message.photograms = 1;
-//
-//		createObject(message);
+
+		// Hack
 		syncronizingWithSever(destinationSocket);
 		draw();
+		// End Hack
 
 		client->threadSDL = std::thread(handleEvents, destinationSocket);
 		client->threadListen = std::thread(receiveFromSever, destinationSocket);
 		client->threadKeepAlive = std::thread(keepAlive, destinationSocket);
 	}
+
 	while(userIsConnected){
 		draw();
 	}
+
 	client->threadSDL.join();
 	client->threadListen.join();
 	client->threadKeepAlive.join();
