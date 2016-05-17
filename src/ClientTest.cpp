@@ -44,6 +44,7 @@ LogWriter *logWriter;
 bool userIsConnected;
 bool deleting;
 bool painting;
+bool gameHasBeenReseted;
 string nombre;
 Client* client;
 Window* window;
@@ -228,7 +229,7 @@ void createObject(mensaje msj){
 	objects.push_back(object);
 }
 
-void handleEvents(int socket){
+void* handleEvents(int socket){
 	SDL_Event event;
 	int button;
 	clientMsj msg;
@@ -238,87 +239,95 @@ void handleEvents(int socket){
 		}
 		strcpy(msg.id, nombre.c_str());
 		switch(button){
-			case 1:
-				strcpy(msg.type, "movement");
-				strcpy(msg.value, "ABJ");
-				break;
-			case 2:
-				strcpy(msg.type, "movement");
-				strcpy(msg.value, "ARR");
-				break;
-			case 3:
-				strcpy(msg.type, "movement");
-				strcpy(msg.value, "DER");
-				break;
-			case 4:
-				strcpy(msg.type, "movement");
-				strcpy(msg.value, "IZQ");
-				break;
-			case 5:
-				strcpy(msg.type, "shoot");
-				strcpy(msg.value, "DIS");
-				break;
-			case 6:
-				strcpy(msg.type, "reset");
-				strcpy(msg.value, "RES");
-				break;
-			case 7:
-				strcpy(msg.type, "animation");
-				strcpy(msg.value, "ANIMATE");
-				break;
-			case 8:
-				userIsConnected = false;
-				//falta destruir las texturas de cada uno de los objetos con sdl_destroytexture();
-				objects.clear();
-				SDL_RenderClear(window->getRenderer());
-				SDL_DestroyRenderer(window->getRenderer());
-				window->renderer = NULL;
-				SDL_DestroyWindow(window->window);
-				window->window = NULL;
-				close(client->getSocketConnection());
-				SDL_Quit();
-				break;
-			case -1:
-				userIsConnected = false;
-				close(client->getSocketConnection());
+		case 1:
+			strcpy(msg.type, "movement");
+			strcpy(msg.value, "ABJ");
+			break;
+		case 2:
+			strcpy(msg.type, "movement");
+			strcpy(msg.value, "ARR");
+			break;
+		case 3:
+			strcpy(msg.type, "movement");
+			strcpy(msg.value, "DER");
+			break;
+		case 4:
+			strcpy(msg.type, "movement");
+			strcpy(msg.value, "IZQ");
+			break;
+		case 5:
+			strcpy(msg.type, "shoot");
+			break;
+		case 6:
+			strcpy(msg.type, "reset");
+			break;
+		case 7:
+			strcpy(msg.type, "animation");
+			break;
+		case 8:
+			userIsConnected = false;
+			//falta destruir las texturas de cada uno de los objetos con sdl_destroytexture();
+			objects.clear();
+			SDL_RenderClear(window->getRenderer());
+			SDL_DestroyRenderer(window->getRenderer());
+			window->renderer = NULL;
+			SDL_DestroyWindow(window->window);
+			window->window = NULL;
+			close(client->getSocketConnection());
+			SDL_Quit();
+			break;
+		case -1:
+			userIsConnected = false;
+			close(client->getSocketConnection());
 		}
 		if(button != 0 && button != 8){
-			usleep(10000);
-			sendMsj(socket, sizeof(msg), &msg);
+			if (!gameHasBeenReseted || button == 6) {
+				usleep(10000);
+				sendMsj(socket, sizeof(msg), &msg);
+			}
 		}
 	}
-
+	pthread_exit(NULL);
 }
 
-void keepAlive(int socketConnection){
+void* keepAlive(int socketConnection){
 	clientMsj msg;
 	strcpy(msg.type, "alive");
 	while(userIsConnected){
 		usleep(1000);
 		sendMsj(socketConnection, sizeof(msg), &msg);
 	}
+	pthread_exit(NULL);
 }
 
 void draw(){
-	SDL_RenderClear(window->getRenderer());
-	mutexObjects.lock();
-	list<Object*>::iterator iterador = objects.begin(); //El primer elemento es el escenario.
-	(*iterador)->paint(window->getRenderer(), (*iterador)->getPosX(), (*iterador)->getPosY());
-	(*iterador)->paint(window->getRenderer(), (*iterador)->getPosX(), (*iterador)->getPosY() - (*iterador)->getHeight());
-	iterador++;
-	for (; iterador != objects.end(); iterador++){
+	if (objects.size() > 0) {
+		SDL_RenderClear(window->getRenderer());
+		mutexObjects.lock();
+
+		list<Object*>::iterator iterador = objects.begin(); //El primer elemento es el escenario.
 		(*iterador)->paint(window->getRenderer(), (*iterador)->getPosX(), (*iterador)->getPosY());
+		(*iterador)->paint(window->getRenderer(), (*iterador)->getPosX(), (*iterador)->getPosY() - (*iterador)->getHeight());
+		iterador++;
+		for (; iterador != objects.end(); iterador++){
+			(*iterador)->paint(window->getRenderer(), (*iterador)->getPosX(), (*iterador)->getPosY());
+		}
+
+		mutexObjects.unlock();
+		window->paint();
 	}
-	mutexObjects.unlock();
-	window->paint();
 }
 
-void receiveFromSever(int socket){
+void* receiveFromSever(int socket){
 	mensaje msj;
 	while(userIsConnected){
 		readObjectMessage(socket, sizeof(msj), &msj);
 		mutexObjects.lock();
 		if(strcmp(msj.action, "create") == 0){
+			if (gameHasBeenReseted) {
+				cout << msj.imagePath << endl;
+			}
+			gameHasBeenReseted = false;
 			createObject(msj);
 		}else if(strcmp(msj.action, "draw") == 0){
 			updateObject(msj);
@@ -326,9 +335,13 @@ void receiveFromSever(int socket){
 			deleteObject(msj);
 		}else if(strcmp(msj.action, "path") == 0){
 			changePath(msj);
+		} else if (strcmp(msj.action, "reset_game") == 0) {
+			gameHasBeenReseted = !gameHasBeenReseted;
+			objects.clear();
 		}
 		mutexObjects.unlock();
 	}
+	pthread_exit(NULL);
 }
 
 void syncronizingWithSever(int socket){
@@ -348,6 +361,7 @@ void syncronizingWithSever(int socket){
 }
 
 int main(int argc, char* argv[]) {
+	gameHasBeenReseted = false;
 	const char *fileName;
 	logWriter = new LogWriter();
 	xmlLoader = new XMLLoader(logWriter);
