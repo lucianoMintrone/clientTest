@@ -9,6 +9,7 @@ CPP_SRCS += \
 ../src/Client.cpp \
 ../src/ClientTest.cpp \
 ../src/LogWriter.cpp \
+../src/MenuPresenter.cpp \
 ../src/Object.cpp \
 ../src/Window.cpp \
 ../src/XMLLoader.cpp \
@@ -24,6 +25,7 @@ OBJS += \
 ./src/Client.o \
 ./src/ClientTest.o \
 ./src/LogWriter.o \
+./src/MenuPresenter.o \
 ./src/Object.o \
 ./src/Window.o \
 ./src/XMLLoader.o \
@@ -39,6 +41,7 @@ CPP_DEPS += \
 ./src/Client.d \
 ./src/ClientTest.d \
 ./src/LogWriter.d \
+./src/MenuPresenter.d \
 ./src/Object.d \
 ./src/Window.d \
 ./src/XMLLoader.d \

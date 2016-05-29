@@ -15,12 +15,15 @@
 #include <sys/time.h>
 #include "LogWriter.h"
 #include <errno.h>
+#include <SDL2/SDL.h>
 #include <chrono>
 #include "Window.h"
 #include "Object.h"
+#include "MenuPresenter.h"
 #include <mutex>
 #include "Client.h"
 #include "Avion.h"
+#include <SDL2/SDL_mixer.h>
 #include "Background.h"
 #define MAXHOSTNAME 256
 #define kClientTestFile "clienteTest.txt"
@@ -29,20 +32,19 @@ using namespace std;
 
 list<Object> objects;
 
-
-
 mutex mutexObjects;
 XMLLoader *xmlLoader;
 XmlParser *parser;
 LogWriter *logWriter;
 bool userIsConnected;
-bool deleting;
-bool painting;
-bool gameHasBeenReseted;
 string nombre;
 Client* client;
 Window* window;
 Avion* avion;
+Mix_Music *gMusic = NULL;
+Mix_Chunk *fireSound = NULL;
+
+
 
 enum MenuOptionChoosedType {
 	MenuOptionChoosedTypeConnect = 1,
@@ -62,6 +64,59 @@ void closeSocket(int socket) {
 	userIsConnected = false;
 }
 
+
+void initializeSDLSounds() {
+    //Initialize SDL
+    if( SDL_Init( SDL_INIT_AUDIO ) < 0 ) {
+        printf( "SDL could not initialize! SDL Error: %s\n", SDL_GetError() );
+    }
+    //Initialize SDL_mixer
+   if( Mix_OpenAudio( 44100, MIX_DEFAULT_FORMAT, 2, 2048 ) < 0 ) {
+       printf( "SDL_mixer could not initialize! SDL_mixer Error: %s\n", Mix_GetError() );
+   }
+
+   //Load music
+   gMusic = Mix_LoadMUS( "gameMusic.wav" );
+   if( gMusic == NULL ) {
+       printf( "Failed to load beat music! SDL_mixer Error: %s\n", Mix_GetError() );
+   }
+   fireSound = Mix_LoadWAV( "gun-gunshot-01.wav" );
+
+   //If there was a problem loading the sound effects
+   if (fireSound == NULL) {
+       printf( "Failed to load fire sound. SDL_mixer Error: %s\n", Mix_GetError() );
+   }
+
+
+
+}
+
+void playMusic() {
+    if( Mix_PlayingMusic() == 0 ) {
+		//Play the music
+		Mix_PlayMusic( gMusic, -1 );
+	}
+}
+
+void playFireSound() {
+	if( Mix_PlayChannel( -1, fireSound, 0 ) == -1 ) {
+		cout<< "Error playing fireSound"<< endl;
+	}
+}
+
+void closeSDLMixer() {
+    //Free the sound effects
+    Mix_FreeChunk( fireSound );
+    fireSound = NULL;
+
+    //Free the music
+    Mix_FreeMusic( gMusic );
+    gMusic = NULL;
+    //Quit SDL subsystems
+    Mix_Quit();
+}
+
+
 int initializeClient(string destinationIp, int port) {
 	struct sockaddr_in remoteSocketInfo;
 	struct hostent *hPtr;
@@ -76,7 +131,6 @@ int initializeClient(string destinationIp, int port) {
 	if ((hPtr = gethostbyname(remoteHost)) == NULL) {
 		cerr << "System DNS name resolution not configured properly." << endl;
 		logWriter->writeConnectionErrorDescription("Error en la IP. System DNS name resolution not configured properly.");
-		//*archivoErrores<<"Error. Ip "<<destinationIp<<" invalida."<<endl;
 		prepareForExit(xmlLoader, parser, logWriter);
 		exit(EXIT_FAILURE);
 	}
@@ -169,9 +223,8 @@ int readObjectMessage(int socket, int bytesARecibir, mensaje* msj){
 	return recibidos;
 }
 
-void initializeSDL(int socketConnection, mensaje windowMsj, mensaje escenarioMsj){
+void initializeSDL(int socketConnection, mensaje windowMsj){
 	window = new Window("1942", windowMsj.height, windowMsj.width);
-	SDL_RenderClear(window->getRenderer());
 	window->paint();
 }
 
@@ -222,9 +275,12 @@ void createObject(mensaje msj){
 	object.setPath(msj.imagePath);
 	object.loadImage(msj.imagePath, window->getRenderer(), msj.width, msj.height);
 	objects.push_back(object);
+	//if (strcmp(msj.imagePath, "bullet.png") == 0) {
+	//	playFireSound();
+	//}
 }
 
-void* handleEvents(int socket){
+void handleEvents(int socket){
 	SDL_Event event;
 	int button;
 	clientMsj msg;
@@ -234,77 +290,82 @@ void* handleEvents(int socket){
 		}
 		strcpy(msg.id, nombre.c_str());
 		switch(button){
-		case 1:
-			strcpy(msg.type, "movement");
-			strcpy(msg.value, "ABJ");
-			break;
-		case 2:
-			strcpy(msg.type, "movement");
-			strcpy(msg.value, "ARR");
-			break;
-		case 3:
-			strcpy(msg.type, "movement");
-			strcpy(msg.value, "DER");
-			break;
-		case 4:
-			strcpy(msg.type, "movement");
-			strcpy(msg.value, "IZQ");
-			break;
-		case 5:
-			strcpy(msg.type, "shoot");
-			break;
-		case 6:
-			strcpy(msg.type, "reset");
-			break;
-		case 7:
-			strcpy(msg.type, "animation");
-			break;
-		case 8:
-			userIsConnected = false;
-			break;
-		case -1:
-			userIsConnected = false;
-			close(client->getSocketConnection());
+			case 1:
+				strcpy(msg.type, "movement");
+				strcpy(msg.value, "ABJ");
+				break;
+			case 2:
+				strcpy(msg.type, "movement");
+				strcpy(msg.value, "ARR");
+				break;
+			case 3:
+				strcpy(msg.type, "movement");
+				strcpy(msg.value, "DER");
+				break;
+			case 4:
+				strcpy(msg.type, "movement");
+				strcpy(msg.value, "IZQ");
+				break;
+			case 5:
+				strcpy(msg.type, "shoot");
+				strcpy(msg.value, "DIS");
+				break;
+			case 6:
+				strcpy(msg.type, "reset");
+				strcpy(msg.value, "RES");
+				break;
+			case 7:
+				strcpy(msg.type, "animation");
+				strcpy(msg.value, "ANIMATE");
+				break;
+			case 8:
+				userIsConnected = false;
+				break;
+			case 9:
+				strcpy(msg.type, "close");
+				strcpy(msg.value, "CLOSE");
 		}
 		if(button != 0 && button != 8){
-			if (!gameHasBeenReseted || button == 6) {
-				usleep(10000);
-				sendMsj(socket, sizeof(msg), &msg);
-			}
+			usleep(10000);
+			sendMsj(socket, sizeof(msg), &msg);
 		}
 	}
-	pthread_exit(NULL);
+
 }
 
-void* keepAlive(int socketConnection){
+void keepAlive(int socketConnection){
 	clientMsj msg;
+	memset(&msg, 0, sizeof(clientMsj));
 	strcpy(msg.type, "alive");
 	while(userIsConnected){
 		usleep(1000);
 		sendMsj(socketConnection, sizeof(msg), &msg);
 	}
-	pthread_exit(NULL);
 }
 
 void draw(){
-	if (objects.size() > 0) {
-		mutexObjects.lock();
+	mutexObjects.lock();
+	if(objects.size()>0){
 		window->paintAll(objects);
-		mutexObjects.unlock();
-		window->paint();
 	}
+	mutexObjects.unlock();
+	window->paint();
 }
 
-void* receiveFromSever(int socket){
+void resetAll(){
+	list<Object>::iterator it = objects.begin();
+	for(; it != objects.end(); it++){
+		(*it).destroyTexture();
+	}
+	objects.clear();
+}
+
+void receiveFromSever(int socket){
 	mensaje msj;
 	while(userIsConnected){
 		readObjectMessage(socket, sizeof(msj), &msj);
 		mutexObjects.lock();
 		if(strcmp(msj.action, "create") == 0){
-			if (gameHasBeenReseted) {
-				cout << msj.imagePath << endl;
-			}
-			gameHasBeenReseted = false;
 			createObject(msj);
 		}else if(strcmp(msj.action, "draw") == 0){
 			updateObject(msj);
@@ -312,15 +373,23 @@ void* receiveFromSever(int socket){
 			deleteObject(msj);
 		}else if(strcmp(msj.action, "path") == 0){
 			changePath(msj);
-		} else if (strcmp(msj.action, "reset_game") == 0) {
-			gameHasBeenReseted = !gameHasBeenReseted;
-			objects.clear();
+		}else if (strcmp(msj.action, "close")==0){
+			userIsConnected = false;
+		}else if (strcmp(msj.action, "reset") == 0){
+			resetAll();
+		}else if (strcmp(msj.action, "bulletSound") == 0){
+			playFireSound();
+		}else if (strcmp(msj.action, "windowSize") == 0){
+			SDL_SetWindowSize(window->window, msj.width, msj.height);
+			window->setHeight(msj.height);
+			window->setWidth(msj.width);
+			window->paint();
 		}
 		mutexObjects.unlock();
 	}
-	pthread_exit(NULL);
 }
 
+// Only for Chano
 void syncronizingWithSever(int socket){
 	mensaje msj;
 	while(userIsConnected){
@@ -336,9 +405,10 @@ void syncronizingWithSever(int socket){
 		}
 	}
 }
+// END Only for Chano
+
 
 int main(int argc, char* argv[]) {
-	gameHasBeenReseted = false;
 	const char *fileName;
 	logWriter = new LogWriter();
 	xmlLoader = new XMLLoader(logWriter);
@@ -362,34 +432,60 @@ int main(int argc, char* argv[]) {
 
 	int destinationSocket;
 	client = new Client();
+	mensaje windowMsj;
+	MenuPresenter graphicMenu;
+	bool sdlInitiated = false;
+	bool nameIsOk = false;
 	while(!userIsConnected){
 		destinationSocket = initializeClient(serverIP, serverPort);
-		cout << "Ingrese nombre para conectarse: ";
-		cin >> nombre;
+		readObjectMessage(destinationSocket, sizeof(windowMsj), &windowMsj);
+		if(!sdlInitiated){
+			initializeSDL(destinationSocket, windowMsj);
+			sdlInitiated = true;
+			graphicMenu.setRenderer(window->renderer);
+		}
+		graphicMenu.loadMenuBackground("fMenu.png",windowMsj.width, windowMsj.height);
+		if(graphicMenu.presentNameMenu())
+			nombre = graphicMenu.getPlayerName();
+		else
+			return 0;
+		cout<<"Nombre elegido: "<<graphicMenu.getPlayerName()<<endl;
 
 		clientMsj recibido;
 		clientMsj inicializacion;
+		memset(&recibido, 0, sizeof(clientMsj));
+		memset(&inicializacion, 0, sizeof(clientMsj));
 		strcpy(inicializacion.value,nombre.c_str());
 		sendMsj(destinationSocket,sizeof(inicializacion),&inicializacion);
 
 		char* messageType = readMsj(destinationSocket, sizeof(recibido), &recibido);
 		if (strcmp(messageType, kServerFullType) == 0) {
 			closeSocket(destinationSocket);
+			graphicMenu.setResultTexture(kServerFullType);
+			graphicMenu.paint();
+			graphicMenu.erasePlayerName();
 			logWriter->writeCannotConnectDueToServerFull();
 		}else if(strcmp(recibido.type,"error") == 0){
 			closeSocket(destinationSocket);
+			graphicMenu.setResultTexture(recibido.value);
+			graphicMenu.paint();
+			graphicMenu.erasePlayerName();
 			cout<< recibido.value << endl;
 		} else {
 			userIsConnected = true;
+			graphicMenu.setResultTexture("Conected!");
+			graphicMenu.paint();
 		}
+		sleep(2);
 	}
 	if(userIsConnected){
-		mensaje windowMsj, escenarioMsj;
-		readObjectMessage(destinationSocket, sizeof(windowMsj), &windowMsj);
+		mensaje escenarioMsj;
 		readObjectMessage(destinationSocket, sizeof(escenarioMsj), &escenarioMsj);
-		initializeSDL(destinationSocket, windowMsj, escenarioMsj);
 		createObject(escenarioMsj);
 		logWriter->writeUserHasConnectedSuccessfully();
+		graphicMenu.~MenuPresenter();
+		initializeSDLSounds();
+		playMusic();
 
 		// Hack
 		syncronizingWithSever(destinationSocket);
@@ -404,7 +500,6 @@ int main(int argc, char* argv[]) {
 	while(userIsConnected){
 		draw();
 	}
-
 	client->threadSDL.join();
 	client->threadListen.join();
 	client->threadKeepAlive.join();
@@ -414,6 +509,7 @@ int main(int argc, char* argv[]) {
 		(*it).destroyTexture();
 	}
 	objects.clear();
+
 	SDL_DestroyRenderer(window->getRenderer());
 	window->renderer = NULL;
 	SDL_DestroyWindow(window->window);
@@ -421,7 +517,7 @@ int main(int argc, char* argv[]) {
 	IMG_Quit();
 	SDL_Quit();
 	close(client->getSocketConnection());
-
+	closeSDLMixer();
 	logWriter->writeUserDidTerminateApp();
 	prepareForExit(xmlLoader, parser, logWriter);
 
