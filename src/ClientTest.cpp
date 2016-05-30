@@ -120,6 +120,21 @@ int sendMsj(int socket, int bytesAEnviar, clientMsj* mensaje){
 	return enviados;
 }
 
+void sendMenuMessage (int socket, int bytesToSend, menuRequestMessage *message) {
+	int bytesSent = 0;
+	int res = 0;
+
+	while(bytesSent < bytesToSend){
+		res = send(socket, &(message)[bytesSent], bytesToSend - bytesSent, MSG_WAITALL);
+		if (res == 0){
+			logWriter->writeErrorConnectionHasClosed();
+			userIsConnected = false;
+		}else if (res > 0){
+			bytesSent += res;
+		}
+	}
+}
+
 char* readMsj(int socket, int bytesARecibir, clientMsj* msj){
 	int totalBytesRecibidos = 0;
 	int recibidos = 0;
@@ -141,6 +156,24 @@ char* readMsj(int socket, int bytesARecibir, clientMsj* msj){
 
 	logWriter->writeReceivedSuccessfullyMessage(msj);
 	return msj->type;
+}
+
+void readMenuMessage(int socket, int bytesToReceive ,menuResponseMessage *message){
+	int totalBytesReceived = 0;
+	int currentBytesReceived = 0;
+
+	while (totalBytesReceived < bytesToReceive){
+		currentBytesReceived = recv(socket, &message[totalBytesReceived], bytesToReceive - totalBytesReceived, MSG_WAITALL);
+		if (currentBytesReceived < 0){
+			userIsConnected = false;
+		}else if(currentBytesReceived == 0){
+				close(socket);
+				userIsConnected = false;
+				logWriter->writeErrorConnectionHasClosed();
+		}else{
+			totalBytesReceived += currentBytesReceived;
+		}
+	}
 }
 
 int readObjectMessage(int socket, int bytesARecibir, mensaje* msj){
@@ -226,6 +259,7 @@ void handleEvents(int socket){
 			button = avion->processEvent(&event);
 		}
 		strcpy(msg.id, nombre.c_str());
+		msg.clientID = client->clientID;
 		switch(button){
 			case 1:
 				strcpy(msg.type, "movement");
@@ -346,6 +380,93 @@ void syncronizingWithSever(int socket){
 }
 // END Only for Chano
 
+void joinTeamWithName(char teamName[kLongChar], int destinationSocket) {
+	menuRequestMessage message;
+	message.id = 0;
+	strncpy(message.type, kJoinTeamType, kLongChar);
+	strncpy(message.teamName, teamName, kLongChar);
+	sendMenuMessage(destinationSocket, sizeof(message), &message);
+}
+
+void createTeamWithName(string teamName, int destinationSocket) {
+	menuRequestMessage message;
+	message.id = 0;
+	strncpy(message.type, kCreateTeamType, kLongChar);
+	strncpy(message.teamName, teamName.c_str(), kLongChar);
+	sendMenuMessage(destinationSocket, sizeof(message), &message);
+}
+
+void presentCreateTeamOptionMenu(menuResponseMessage message, int destinationSocket) {
+	bool optionSelectedIsValid = false;
+	int optionSelected;
+	while (!optionSelectedIsValid) {
+		cout << "Elija una opcion: " << endl;
+		cout << "1. Crear equipo" << endl;
+		if (message.firstTeamIsAvailableToJoin) {
+			cout << "2. Unirse al equipo " << message.firstTeamName << endl;
+		}
+
+		cin >> optionSelected;
+		if (optionSelected == 1) {
+			optionSelectedIsValid = true;
+			cout << "Ingrese el nombre del equipo :" << endl;
+			string teamName;
+			cin >> teamName;
+			createTeamWithName(teamName, destinationSocket);
+		}
+		if (optionSelected == 2) {
+			if (message.firstTeamIsAvailableToJoin) {
+				optionSelectedIsValid = true;
+				joinTeamWithName(message.firstTeamName, destinationSocket);
+			} else {
+				optionSelectedIsValid = false;
+			}
+		}
+		if (!optionSelectedIsValid) {
+			cout << "Opcion incorrecta" << endl;
+		}
+	}
+}
+
+void presentOnlyJoinTeamOptionMenu(menuResponseMessage message, int destinationSocket) {
+	bool optionSelectedIsValid = false;
+	int optionSelected;
+	while (!optionSelectedIsValid) {
+		cout << "Elija una opcion: " << endl;
+		cout << "1. Unirse al equipo "<< message.firstTeamName << endl;
+		if (message.secondTeamIsAvailableToJoin) {
+			cout << "2. Unirse al equipo " << message.secondTeamName << endl;
+		}
+
+		cin >> optionSelected;
+		if (optionSelected == 1) {
+			optionSelectedIsValid = true;
+			joinTeamWithName(message.firstTeamName, destinationSocket);
+		}
+		if (optionSelected == 2) {
+			if (message.secondTeamIsAvailableToJoin) {
+				optionSelectedIsValid = true;
+				joinTeamWithName(message.secondTeamName, destinationSocket);
+			} else {
+				optionSelectedIsValid = false;
+			}
+		}
+		if (!optionSelectedIsValid) {
+			cout << "Opcion incorrecta" << endl;
+		}
+	}
+}
+
+void presentTeamMenu(int destinationSocket) {
+	menuResponseMessage message;
+	readMenuMessage(destinationSocket, sizeof(message), &message);
+	if (message.userCanCreateATeam) {
+		presentCreateTeamOptionMenu(message, destinationSocket);
+	} else {
+		presentOnlyJoinTeamOptionMenu(message, destinationSocket);
+	}
+}
+
 int main(int argc, char* argv[]) {
 	const char *fileName;
 	logWriter = new LogWriter();
@@ -391,6 +512,8 @@ int main(int argc, char* argv[]) {
 			cout<< recibido.value << endl;
 		} else {
 			userIsConnected = true;
+			client->clientID = recibido.clientID;
+			presentTeamMenu(destinationSocket);
 		}
 	}
 	if(userIsConnected){
