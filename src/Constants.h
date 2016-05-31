@@ -56,6 +56,7 @@ struct clientMsj {
 	char type[kLongChar];
 	char value[kLongChar];
 	int clientID;
+	bool isFirstTimeLogin;
 };
 
 struct mensaje {

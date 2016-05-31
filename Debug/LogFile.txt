@@ -1,5 +1,3 @@
 Se recibio satisfactoriamente el mensaje con ID:0 tipo:connection_ok valor:Client connected
 El usuario se conecto satisfactoriamente.
-Error: se cerro la conexion
-Error: no se pudo enviar el mensaje con Id: tipo:alive valor:
 El usuario cerro la aplicacion

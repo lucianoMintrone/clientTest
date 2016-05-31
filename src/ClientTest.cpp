@@ -433,7 +433,8 @@ void presentOnlyJoinTeamOptionMenu(menuResponseMessage message, int destinationS
 	int optionSelected;
 	while (!optionSelectedIsValid) {
 		cout << "Elija una opcion: " << endl;
-		cout << "1. Unirse al equipo "<< message.firstTeamName << endl;
+		if (message.firstTeamIsAvailableToJoin)
+			cout << "1. Unirse al equipo "<< message.firstTeamName << endl;
 		if (message.secondTeamIsAvailableToJoin) {
 			cout << "2. Unirse al equipo " << message.secondTeamName << endl;
 		}
@@ -460,6 +461,7 @@ void presentOnlyJoinTeamOptionMenu(menuResponseMessage message, int destinationS
 void presentTeamMenu(int destinationSocket) {
 	menuResponseMessage message;
 	readMenuMessage(destinationSocket, sizeof(message), &message);
+	cout << message.userCanCreateATeam << endl;
 	if (message.userCanCreateATeam) {
 		presentCreateTeamOptionMenu(message, destinationSocket);
 	} else {
@@ -513,7 +515,8 @@ int main(int argc, char* argv[]) {
 		} else {
 			userIsConnected = true;
 			client->clientID = recibido.clientID;
-			presentTeamMenu(destinationSocket);
+			if (recibido.isFirstTimeLogin)
+				presentTeamMenu(destinationSocket);
 		}
 	}
 	if(userIsConnected){
