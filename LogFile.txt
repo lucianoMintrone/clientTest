@@ -1,1 +1,2 @@
 Falta escribir el nombre del archivo del cliente, se usara uno por defecto.
+Hubo un error mientras el usuario se conectaba: Puede que el servidor este apagado. Intenta mas tarde

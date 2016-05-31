@@ -1,3 +1,0 @@
-Se recibio satisfactoriamente el mensaje con ID:0 tipo:connection_ok valor:Client connected
-El usuario se conecto satisfactoriamente.
-El usuario cerro la aplicacion
