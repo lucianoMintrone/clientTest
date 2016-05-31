@@ -469,6 +469,7 @@ void presentTeamMenu(int destinationSocket) {
 	}
 }
 
+
 int main(int argc, char* argv[]) {
 	const char *fileName;
 	logWriter = new LogWriter();
